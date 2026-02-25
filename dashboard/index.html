@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mother AI Control Plane</title>
+    <script src="https://unpkg.com/htmx.org@1.9.11"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body class="bg-slate-900 text-slate-100 min-h-screen">
+    <div class="max-w-5xl mx-auto py-10 px-4">
+      <header class="mb-8">
+        <h1 class="text-3xl font-bold">Mother AI Control Plane</h1>
+        <p class="text-sm text-slate-400">Secure monitoring and control for all agents.</p>
+      </header>
+      <section id="login-section" class="bg-slate-800 rounded-xl p-6 shadow-md">
+        <h2 class="text-xl font-semibold mb-4">Dashboard Login</h2>
+        <form id="login-form" class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium">Email</label>
+            <input id="login-email" class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2" type="email" placeholder="you@example.com" required />
+          </div>
+          <div>
+            <label class="block text-sm font-medium">Role</label>
+            <select id="login-role" class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2">
+              <option value="viewer">Viewer</option>
+              <option value="operator">Operator</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium">API Key</label>
+            <input id="login-key" class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2" type="password" placeholder="API key" required />
+          </div>
+          <button class="bg-indigo-500 hover:bg-indigo-400 transition-colors text-white px-4 py-2 rounded" type="submit">Issue Token</button>
+        </form>
+        <p id="login-error" class="text-sm text-rose-400 mt-4 hidden"></p>
+      </section>
+      <section id="dashboard" class="hidden">
+        <div class="flex items-center justify-between mb-6">
+          <div>
+            <h2 class="text-2xl font-semibold">Agents</h2>
+            <p class="text-xs text-slate-400">Correlation ID: <span id="cid-display">-</span></p>
+          </div>
+          <div class="flex gap-3">
+            <button id="refresh-status" class="bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded">Refresh</button>
+            <button id="logout" class="bg-rose-500 hover:bg-rose-400 px-3 py-2 rounded">Logout</button>
+          </div>
+        </div>
+        <div id="agent-cards" class="grid md:grid-cols-2 gap-4"></div>
+        <div class="mt-6">
+          <h3 class="text-lg font-semibold mb-2">Audit Trail</h3>
+          <pre id="audit-log" class="bg-slate-800 rounded p-4 h-48 overflow-y-auto text-xs"></pre>
+        </div>
+      </section>
+    </div>
+    <script>
+      const state = {
+        token: null,
+        role: "viewer",
+        ws: null,
+      };
+
+      function setCorrelationId(value) {
+        document.getElementById("cid-display").textContent = value;
+      }
+
+      function ensureWebSocket() {
+        if (!state.token) {
+          return;
+        }
+        if (state.ws) {
+          state.ws.close();
+        }
+        const url = `${window.location.origin.replace("http", "ws")}/ws/status`;
+        state.ws = new WebSocket(url, []);
+        state.ws.onopen = () => {
+          state.ws.send(JSON.stringify({ token: state.token }));
+        };
+        state.ws.onmessage = (evt) => {
+          const payload = JSON.parse(evt.data);
+          renderAgents(payload);
+        };
+        state.ws.onclose = () => {
+          setTimeout(ensureWebSocket, 2000);
+        };
+      }
+
+      function renderAgents(payload) {
+        const cards = payload.agents
+          .map((agent) => {
+            const status = agent.running ? "Running" : "Stopped";
+            const badge = agent.running ? "bg-emerald-500" : "bg-rose-500";
+            const disabled = state.role === "viewer" || payload.circuit_breaker.open;
+            const actions = `
+              <div class=\"flex gap-2\">
+                <button data-agent=\"${agent.key}\" data-action=\"start\" class=\"start-btn bg-indigo-500 hover:bg-indigo-400 px-3 py-1 rounded disabled:opacity-40\" ${disabled ? "disabled" : ""}>Start</button>
+                <button data-agent=\"${agent.key}\" data-action=\"stop\" class=\"stop-btn bg-amber-500 hover:bg-amber-400 px-3 py-1 rounded disabled:opacity-40\" ${disabled ? "disabled" : ""}>Stop</button>
+              </div>`;
+            return `
+              <div class=\"bg-slate-800 rounded-xl p-4 shadow\">
+                <div class=\"flex items-center justify-between\">
+                  <div>
+                    <h4 class=\"font-semibold text-lg\">${agent.key}</h4>
+                    <p class=\"text-xs text-slate-400\">Last tick: ${agent.last_tick ?? "-"}</p>
+                  </div>
+                  <span class=\"${badge} text-xs font-semibold px-2 py-1 rounded-full\">${status}</span>
+                </div>
+                <p class=\"mt-3 text-sm text-slate-300\">${agent.last_error ?? "No errors"}</p>
+                ${actions}
+              </div>`;
+          })
+          .join("\n");
+        document.getElementById("agent-cards").innerHTML = cards;
+        document.getElementById("audit-log").textContent = JSON.stringify(
+          {
+            circuit_breaker: payload.circuit_breaker,
+            last_audit_ts: payload.last_audit_ts,
+          },
+          null,
+          2,
+        );
+      }
+
+      async function callControl(agentKey, action) {
+        const endpoint = action === "start" ? "/start" : "/stop";
+        const cid = crypto.randomUUID();
+        setCorrelationId(cid);
+        const response = await fetch(endpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${state.token}`,
+            "X-Correlation-ID": cid,
+          },
+          body: JSON.stringify({ agent_key: agentKey }),
+        });
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({ detail: "error" }));
+          alert(`Action failed: ${error.detail || "Unknown error"}`);
+        }
+      }
+
+      document.addEventListener("click", (event) => {
+        const target = event.target;
+        if (target.classList.contains("start-btn") || target.classList.contains("stop-btn")) {
+          event.preventDefault();
+          callControl(target.dataset.agent, target.dataset.action);
+        }
+      });
+
+      document.getElementById("logout").addEventListener("click", () => {
+        state.token = null;
+        localStorage.removeItem("mother_token");
+        document.getElementById("dashboard").classList.add("hidden");
+        document.getElementById("login-section").classList.remove("hidden");
+        if (state.ws) {
+          state.ws.close();
+        }
+      });
+
+      document.getElementById("refresh-status").addEventListener("click", async () => {
+        if (!state.token) return;
+        const cid = crypto.randomUUID();
+        setCorrelationId(cid);
+        const res = await fetch("/status", {
+          headers: {
+            Authorization: `Bearer ${state.token}`,
+            "X-Correlation-ID": cid,
+          },
+        });
+        if (res.ok) {
+          const payload = await res.json();
+          renderAgents(payload);
+        }
+      });
+
+      document.getElementById("login-form").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const email = document.getElementById("login-email").value;
+        const role = document.getElementById("login-role").value;
+        const apiKey = document.getElementById("login-key").value;
+        const res = await fetch("/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-API-Key": apiKey },
+          body: JSON.stringify({ email, role }),
+        });
+        if (!res.ok) {
+          document.getElementById("login-error").textContent = "Login failed";
+          document.getElementById("login-error").classList.remove("hidden");
+          return;
+        }
+        const data = await res.json();
+        state.token = data.token;
+        state.role = role;
+        localStorage.setItem("mother_token", state.token);
+        document.getElementById("login-section").classList.add("hidden");
+        document.getElementById("dashboard").classList.remove("hidden");
+        ensureWebSocket();
+      });
+
+      document.addEventListener("htmx:configRequest", (event) => {
+        if (state.token) {
+          event.detail.headers.Authorization = `Bearer ${state.token}`;
+        }
+        event.detail.headers["X-Correlation-ID"] = crypto.randomUUID();
+      });
+
+      const existing = localStorage.getItem("mother_token");
+      if (existing) {
+        state.token = existing;
+        document.getElementById("login-section").classList.add("hidden");
+        document.getElementById("dashboard").classList.remove("hidden");
+        ensureWebSocket();
+      }
+    </script>
+  </body>
+</html>

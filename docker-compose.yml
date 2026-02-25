@@ -1,0 +1,17 @@
+version: "3.9"
+services:
+  gateway:
+    build: .
+    environment:
+      - MOTHER_API_KEY=${MOTHER_API_KEY}
+      - MOTHER_LOG_LEVEL=INFO
+      - MOTHER_DASHBOARD_ORIGIN=http://localhost:5173
+      - MOTHER_REDIS_URL=redis://redis:6379/0
+    ports:
+      - "8000:8000"
+    depends_on:
+      - redis
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
