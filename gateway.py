@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import pathlib
+import time
 
 from fastapi import FastAPI, Header, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,10 +18,12 @@ from ai.supervisor import Supervisor
 from ai.utils.logging import setup_logging
 from db.session import init_db
 from dashboard import ws as dashboard_ws
-from gateway.auth import Role, issue_jwt
-from gateway.guards import limiter
-from gateway.metrics import metrics_app, record_gateway_error, set_agent_state
-from gateway.middleware import CorrelationIdMiddleware
+from gateway_pkg.auth import Role, issue_jwt
+from gateway_pkg.guards import limiter
+from gateway_pkg.metrics import metrics_app, record_gateway_error, set_agent_state
+from gateway_pkg.middleware import CorrelationIdMiddleware
+from routers.agents import registry_dryrun, registry_validate
+from routers.control import Command, start_agent as _start_agent, stop_agent as _stop_agent
 from routers import (
     agents_router,
     console_router,
@@ -41,6 +44,7 @@ LOGGER = logging.getLogger("gateway")
 
 app = FastAPI(title="Mother AI Gateway", version="2.0.0")
 app.state.ready = False
+app.state.version = "2.0.0"
 
 app.add_middleware(CorrelationIdMiddleware)
 app.add_middleware(SlowAPIMiddleware, limiter=limiter)
@@ -78,9 +82,23 @@ class LoginResponse(BaseModel):
     token: str
 
 
+# Backwards-compat shims for legacy tests/imports.
+async def start_agent(cmd: Command, request: Request, ctx) -> dict[str, object]:
+    if not hasattr(request, "app"):
+        request.app = app
+    return await _start_agent(cmd, request, ctx)
+
+
+async def stop_agent(cmd: Command, request: Request, ctx) -> dict[str, object]:
+    if not hasattr(request, "app"):
+        request.app = app
+    return await _stop_agent(cmd, request, ctx)
+
+
 @app.on_event("startup")
 async def on_startup() -> None:
     app.state.ready = False
+    app.state.started_at = time.time()
     init_db()
     registry = load_registry()
     agents = hydrate_agents(registry)
@@ -129,3 +147,4 @@ async def login(request: Request, payload: LoginRequest, x_api_key: str | None =
 @app.get("/", include_in_schema=False)
 async def index() -> FileResponse:
     return FileResponse("dashboard/index.html")
+
