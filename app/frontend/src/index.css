@@ -1,0 +1,51 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #05060a;
+  --panel: #0a0d14;
+  --panel2: #0e121b;
+  --grid: #0d1321;
+  --text: #d5f2e3;
+  --text-dim: #87a3a3;
+  --neon: #00ffd1;
+  --neon2: #a855f7;
+  --alert: #00ff87;
+  --danger: #ff3b81;
+  --warn: #ffc857;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: 'JetBrains Mono', monospace;
+  min-height: 100vh;
+  background-image: linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+a {
+  color: inherit;
+}
+
+.cyber-card {
+  background: linear-gradient(145deg, rgba(10, 13, 20, 0.95), rgba(14, 18, 27, 0.9));
+  border: 1px solid rgba(0, 255, 209, 0.2);
+  box-shadow: 0 0 30px rgba(0, 255, 209, 0.12);
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  height: 6px;
+  width: 6px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: rgba(168, 85, 247, 0.6);
+  border-radius: 9999px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: rgba(13, 19, 33, 0.8);
+}

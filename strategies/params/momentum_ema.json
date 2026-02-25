@@ -1,0 +1,6 @@
+{
+  "default": {
+    "ema_fast": 12,
+    "ema_slow": 26
+  }
+}
