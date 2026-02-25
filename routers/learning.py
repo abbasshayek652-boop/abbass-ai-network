@@ -8,7 +8,7 @@ from sqlmodel import Session
 
 from db.models import AgentEvent
 from db.session import engine
-from gateway.auth import AuthContext, get_operator
+from gateway_pkg.auth import AuthContext, get_operator
 
 
 router = APIRouter()
@@ -37,3 +37,4 @@ async def learning_train(payload: LearningEventRequest, _: AuthContext = Depends
 async def learning_promote(payload: LearningEventRequest, _: AuthContext = Depends(get_operator)) -> dict[str, Any]:
     event_id = _log_event("learning_promote", payload)
     return {"ok": True, "event_id": event_id}
+

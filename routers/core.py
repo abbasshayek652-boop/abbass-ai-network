@@ -9,8 +9,8 @@ from sqlmodel import Session, select
 
 from db.models import AgentEvent
 from db.session import engine
-from gateway.auth import AuthContext, get_viewer
-from gateway.guards import circuit_breaker
+from gateway_pkg.auth import AuthContext, get_viewer
+from gateway_pkg.guards import circuit_breaker
 
 
 router = APIRouter()
@@ -66,3 +66,4 @@ async def readyz(request: Request) -> dict[str, object]:
 @router.get("/status")
 async def status_endpoint(request: Request, _: AuthContext = Depends(get_viewer)) -> dict[str, Any]:
     return await status_payload(request.app)
+

@@ -5,7 +5,7 @@ import asyncio
 from fastapi import Request
 
 import gateway
-from gateway.auth import AuthContext
+from gateway_pkg.auth import AuthContext
 from routers.core import status_endpoint
 
 
@@ -22,3 +22,4 @@ def test_status() -> None:
     assert "running" in payload
     assert isinstance(payload["loaded_agents"], list)
     assert isinstance(payload["running"], dict)
+
